@@ -2,6 +2,12 @@
 name = "blabla_forward"
 version = "0.1.0"
 edition = "2021"
+[profile.release]
+overflow-checks = true
+opt-level = "z"
+lto = "fat"
+strip = true
+
 
 [dependencies]
 teloxide = { version = "0.13.0" }
