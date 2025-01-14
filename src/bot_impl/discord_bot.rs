@@ -13,12 +13,10 @@ struct Handler{
 
 #[async_trait]
 impl EventHandler for Handler {
-    // Called on every new message in text channels
     async fn message(&self, _ctx: Context, msg: Message) {
         if msg.channel_id == self.monitored_channel_id {
             println!("Message received in monitored Discord channel: {}", msg.content);
 
-            // Forward the message via the tokio::mpsc channel
             if let Err(err) = self.unbounded_sender.send(msg.content.clone()) {
                 eprintln!("Error forwarding message: {:?}", err);
             }
@@ -38,7 +36,6 @@ pub struct DiscordBot {
 impl DiscordBot {
     pub async fn new(bot_token: &str, unbounded_sender: UnboundedSender<String>, monitored_channel_id: u64) -> Self {
 
-        // Create the bot framework with the Handler for events
         let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
         let handler = Handler {unbounded_sender, monitored_channel_id};
