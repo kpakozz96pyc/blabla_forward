@@ -1,0 +1,17 @@
+[package]
+name = "blabla_forward"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+teloxide = { version = "0.13.0" }
+async-trait = "0.1.85"
+serenity = { version = "0.12", default-features = false, features = [
+    "client",           # Core client functionality
+    "gateway",          # Gateway for handling Discord events
+    "http",             # HTTP client for interacting with Discord APIs
+    "builder",          # Required for `CreateAllowedMentions` and other builders
+    "rustls_backend"    # TLS backend for secure connections (use native_tls_backend if preferred)
+] }
+tokio = { version = "1", features = ["full"] }
+dotenv = "0.15"
