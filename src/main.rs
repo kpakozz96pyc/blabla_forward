@@ -11,6 +11,7 @@ mod settings;
 
 #[tokio::main]
 async fn main() {
+    println!("BlaBLa version 0.1.0");
     let settings = settings::Settings::new();
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 

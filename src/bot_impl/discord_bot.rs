@@ -16,9 +16,10 @@ struct Handler{
 impl EventHandler for Handler {
     async fn message(&self, _ctx: Context, msg: Message) {
         if msg.channel_id == self.monitored_channel_id {
-            println!("Message received in monitored Discord channel: {}", msg.content);
+            let message = format!("<b>{}</b> : {}", &msg.author.name, &msg.content);
 
-            if let Err(err) = self.unbounded_sender.send(msg.content.clone()) {
+
+            if let Err(err) = self.unbounded_sender.send(message) {
                 eprintln!("Error forwarding message: {:?}", err);
             }
         }
