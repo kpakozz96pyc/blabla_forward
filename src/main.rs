@@ -1,40 +1,61 @@
-use std::sync::Arc;
-use serenity::futures::{SinkExt, TryFutureExt};
-use tokio::sync::mpsc;
 use crate::bot_impl::discord_bot::DiscordBot;
 use crate::bot_impl::telegram_bot::TelegramBot;
 use crate::bot_impl::uni_message::UniMessage;
-use crate::bot_traits::send::Send;
+use crate::bot_traits::send::SendMessage;
+use crate::message_handler::{Bridge, MessageHandler};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
-mod bot_traits;
 mod bot_impl;
+mod bot_traits;
+mod message_handler;
+mod publisher;
 mod settings;
 
 #[tokio::main]
 async fn main() {
-    println!("BlaBLa version 0.1.0");
+    println!("BlaBLa version 0.1.1");
     let settings = settings::Settings::new();
     let (tx, mut rx) = mpsc::unbounded_channel::<UniMessage>();
 
+    let shared_tx = Arc::new(tx);
+
+    let bridges = vec![
+        Bridge {
+            from_channel_id: settings.discord_channel_id,
+            to_channel_id: settings.telegram_chat_id,
+        },
+        Bridge {
+            from_channel_id: settings.discord_channel_id,
+            to_channel_id: -4760599257,
+        },
+    ];
+
+    let message_handler = MessageHandler {
+        bridges,
+        bus: Arc::clone(&shared_tx),
+    };
+
     let telegram_bot = create_telegram_bot(&settings.telegram_bot_token)
-        .await.expect("Failed to create Telegram bot");
+        .await
+        .expect("Failed to create Telegram bot");
 
     let telegram_bot_clone = Arc::clone(&telegram_bot);
+
     tokio::spawn(async move {
-        while let Some(mut message) = rx.recv().await {
-            message.to_channel_id = Some(settings.telegram_chat_id);
+        while let Some(message) = rx.recv().await {
             let _ = telegram_bot_clone.send(message).await;
         }
     });
 
-    let mut discord_bot = create_discord_bot(&settings.discord_bot_token, tx, settings.discord_channel_id);
-    // Initialize the Discord bot
+    let mut discord_bot =
+        create_discord_bot(&settings.discord_bot_token, Arc::new(message_handler));
+
     discord_bot.await.expect("Failed to initialize Discord bot");
 }
 
 async fn create_telegram_bot(token: &str) -> Result<Arc<TelegramBot>, &'static str> {
     for attempt in 1..=3 {
-        // Attempt to create the Telegram bot
         let telegram_bot = TelegramBot::new(token);
         println!("Telegram bot created successfully on attempt {attempt}");
         return Ok(Arc::new(telegram_bot));
@@ -44,12 +65,11 @@ async fn create_telegram_bot(token: &str) -> Result<Arc<TelegramBot>, &'static s
 
 async fn create_discord_bot(
     token: &str,
-    tx: mpsc::UnboundedSender<UniMessage>,
-    channel_id: u64,
+    handler: Arc<MessageHandler>,
 ) -> Result<DiscordBot, &'static str> {
     for attempt in 1..=3 {
         // Attempt to create a Discord bot
-        let discord_bot = DiscordBot::new(token, tx.clone(), channel_id).await;
+        let discord_bot = DiscordBot::new(token, handler).await;
         println!("Discord bot created successfully on attempt {attempt}");
         return Ok(discord_bot);
     }

@@ -1,7 +1,5 @@
 use crate::bot_impl::uni_message::UniMessage;
-use crate::bot_traits::connect::Connect;
-use crate::bot_traits::listen::Listen;
-use crate::bot_traits::send::Send;
+use crate::bot_traits::send::SendMessage;
 use async_trait::async_trait;
 use teloxide::payloads::SendMessageSetters;
 use teloxide::prelude::{Request, Requester};
@@ -43,7 +41,7 @@ impl TelegramBot {
 }
 
 #[async_trait]
-impl Send for TelegramBot {
+impl SendMessage for TelegramBot {
     async fn send(&self, message: UniMessage) {
         if message.to_channel_id.is_none() {
             eprintln!("Target channel not specified!");
@@ -72,7 +70,7 @@ fn format_message(message: &str, author: &str) -> String {
 }
 
 fn escape_markdown_v2(text: &str) -> String {
-    let special_chars = r#"_*[]()~`>#+-=|{}.!\"#;
+    let special_chars = r#"_[]()~`>#+-=|{}.!\"#;
     let mut escaped = String::new();
 
     for character in text.chars() {

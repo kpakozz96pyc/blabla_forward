@@ -1,39 +1,34 @@
+use std::sync::Arc;
 use crate::bot_impl::uni_message::UniMessage;
-use crate::bot_traits::listen::Listen;
 use serenity::all::GatewayIntents;
 use serenity::async_trait;
 use serenity::client::Client;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use tokio::sync::mpsc::UnboundedSender;
+use crate::message_handler::MessageHandler;
 
 struct Handler {
-    unbounded_sender: UnboundedSender<UniMessage>,
-    monitored_channel_id: u64,
+    handler: Arc<MessageHandler>,
 }
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, _ctx: Context, msg: Message) {
-        if msg.channel_id == self.monitored_channel_id {
-            let u_m = UniMessage {
-                id: msg.id.to_string(),
-                message: parse_message(&msg.content, &msg),
-                author: msg.author.name,
-                from_channel_id: msg.channel_id.get() as i64,
-                to_channel_id: None,
-                attachment_urls: msg
-                    .attachments
-                    .into_iter()
-                    .map(|a| a.url.to_string())
-                    .collect(),
-            };
+         let u_m = UniMessage {
+             id: msg.id.to_string(),
+             message: parse_message(&msg.content, &msg),
+             author: msg.author.name,
+             from_channel_id: msg.channel_id.get(),
+             to_channel_id: None,
+             attachment_urls: msg
+                 .attachments
+                 .into_iter()
+                 .map(|a| a.url.to_string())
+                 .collect(),
+         };
 
-            if let Err(err) = self.unbounded_sender.send(u_m) {
-                eprintln!("Error forwarding message: {:?}", err);
-            }
-        }
+        self.handler.handle_message(u_m);
     }
 
     // Called when the bot is ready
@@ -49,14 +44,12 @@ pub struct DiscordBot {
 impl DiscordBot {
     pub async fn new(
         bot_token: &str,
-        unbounded_sender: UnboundedSender<UniMessage>,
-        monitored_channel_id: u64,
+        handler: Arc<MessageHandler>
     ) -> Self {
         let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
         let handler = Handler {
-            unbounded_sender,
-            monitored_channel_id,
+            handler
         };
         let mut client = Client::builder(bot_token, intents)
             .event_handler(handler)
@@ -85,5 +78,5 @@ fn parse_message(content: &str, msg: &Message) -> String {
     }
 
     // Return the parsed content with mentions replaced
-    parsed_content
+    return parsed_content;
 }
