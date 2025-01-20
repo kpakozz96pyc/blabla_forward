@@ -3,6 +3,7 @@ use serenity::futures::{SinkExt, TryFutureExt};
 use tokio::sync::mpsc;
 use crate::bot_impl::discord_bot::DiscordBot;
 use crate::bot_impl::telegram_bot::TelegramBot;
+use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::Send;
 
 mod bot_traits;
@@ -13,15 +14,16 @@ mod settings;
 async fn main() {
     println!("BlaBLa version 0.1.0");
     let settings = settings::Settings::new();
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<UniMessage>();
 
     let telegram_bot = create_telegram_bot(&settings.telegram_bot_token)
         .await.expect("Failed to create Telegram bot");
 
     let telegram_bot_clone = Arc::clone(&telegram_bot);
     tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            let _ = telegram_bot_clone.send(settings.telegram_chat_id, &message).await;
+        while let Some(mut message) = rx.recv().await {
+            message.to_channel_id = Some(settings.telegram_chat_id);
+            let _ = telegram_bot_clone.send(message).await;
         }
     });
 
@@ -42,7 +44,7 @@ async fn create_telegram_bot(token: &str) -> Result<Arc<TelegramBot>, &'static s
 
 async fn create_discord_bot(
     token: &str,
-    tx: mpsc::UnboundedSender<String>,
+    tx: mpsc::UnboundedSender<UniMessage>,
     channel_id: u64,
 ) -> Result<DiscordBot, &'static str> {
     for attempt in 1..=3 {
