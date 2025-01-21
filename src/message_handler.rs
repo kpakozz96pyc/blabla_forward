@@ -2,7 +2,9 @@ use tokio::sync::mpsc::{UnboundedSender};
 use crate::bot_traits::send::SendMessage;
 use crate::bot_impl::uni_message::UniMessage;
 use std::sync::Arc;
+use serde::Deserialize;
 
+#[derive(Deserialize, Copy, Clone)]
 pub struct Bridge {
     pub from_channel_id: u64,
     pub to_channel_id: i64,

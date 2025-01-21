@@ -2,7 +2,7 @@ use crate::bot_impl::discord_bot::DiscordBot;
 use crate::bot_impl::telegram_bot::TelegramBot;
 use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::SendMessage;
-use crate::message_handler::{Bridge, MessageHandler};
+use crate::message_handler::{MessageHandler};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -20,19 +20,8 @@ async fn main() {
 
     let shared_tx = Arc::new(tx);
 
-    let bridges = vec![
-        Bridge {
-            from_channel_id: settings.discord_channel_id,
-            to_channel_id: settings.telegram_chat_id,
-        },
-        Bridge {
-            from_channel_id: settings.discord_channel_id,
-            to_channel_id: -4760599257,
-        },
-    ];
-
     let message_handler = MessageHandler {
-        bridges,
+        bridges: settings.bridges.clone(),
         bus: Arc::clone(&shared_tx),
     };
 
@@ -67,10 +56,9 @@ async fn create_discord_bot(
     token: &str,
     handler: Arc<MessageHandler>,
 ) -> Result<DiscordBot, &'static str> {
-    for attempt in 1..=3 {
+    for _ in 1..=3 {
         // Attempt to create a Discord bot
         let discord_bot = DiscordBot::new(token, handler).await;
-        println!("Discord bot created successfully on attempt {attempt}");
         return Ok(discord_bot);
     }
     Err("Failed to create Discord bot after 3 attempts.")
