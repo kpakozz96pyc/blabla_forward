@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UniMessage
 {
     pub id: String,

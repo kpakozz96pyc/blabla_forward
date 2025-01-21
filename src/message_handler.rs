@@ -1,5 +1,4 @@
 use tokio::sync::mpsc::{UnboundedSender};
-use crate::bot_traits::send::SendMessage;
 use crate::bot_impl::uni_message::UniMessage;
 use std::sync::Arc;
 use serde::Deserialize;
@@ -16,18 +15,10 @@ pub struct MessageHandler {
 }
 
 impl MessageHandler {
-
-    fn new (bus: Arc<UnboundedSender<UniMessage>>, bridges: Vec<Bridge>) -> Self {
-        Self {
-            bus,
-            bridges
-        }
-    }
-
     pub fn handle_message(&self, message: UniMessage)
     {
         for bridge in self.bridges.iter() {
-            if (bridge.from_channel_id == message.from_channel_id) {
+            if bridge.from_channel_id == message.from_channel_id {
                 let mut m = message.clone();
                 m.to_channel_id = Some(bridge.to_channel_id);
                 if let Err(err) = self.bus.send(m) {

@@ -9,7 +9,6 @@ use tokio::sync::mpsc;
 mod bot_impl;
 mod bot_traits;
 mod message_handler;
-mod publisher;
 mod settings;
 
 #[tokio::main]
@@ -37,7 +36,7 @@ async fn main() {
         }
     });
 
-    let mut discord_bot =
+    let discord_bot =
         create_discord_bot(&settings.discord_bot_token, Arc::new(message_handler));
 
     discord_bot.await.expect("Failed to initialize Discord bot");
