@@ -2,18 +2,23 @@ use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::SendMessage;
 use async_trait::async_trait;
 use teloxide::payloads::SendMessageSetters;
-use teloxide::prelude::{Request, Requester};
+use teloxide::prelude::{Message, Request, Requester};
 use teloxide::types::{ChatId, ParseMode, Recipient};
 use teloxide::Bot;
+use tokio::sync::mpsc::UnboundedSender;
+use crate::bot_impl::channel_id::ChannelId;
+use crate::bot_traits::listen::Listen;
+use crate::bot_traits::messenger_bot::MessengerBot;
 
 pub struct TelegramBot {
     bot: Bot,
+    sender: UnboundedSender<UniMessage>
 }
 
 impl TelegramBot {
-    pub fn new(bot_token: &str) -> Self {
+    pub fn new(bot_token: String, sender: UnboundedSender<UniMessage>) -> Self {
         let bot = Bot::new(bot_token);
-        TelegramBot { bot }
+        TelegramBot { bot,  sender}
     }
 
     async fn inner_send(&self,channel_id: i64,  message_content: String, parse_mode: ParseMode) {
@@ -50,9 +55,49 @@ impl SendMessage for TelegramBot {
 
         let messages = get_messages(&message);
         for m in messages {
-            self.inner_send(message.to_channel_id.unwrap(), m.0, m.1).await;
+            if let Some(ChannelId::I64(channel_id)) = message.to_channel_id.clone() {
+                self.inner_send(channel_id, m.0, m.1).await;
+            } else {
+                eprintln!("Error: Expected ChannelId::I64 but got something else");
+            }
         }
     }
+}
+
+#[async_trait]
+impl Listen for TelegramBot {
+    async fn listen(&mut self) {
+        let sender = self.sender.clone(); // Clone the sender so it can be moved into the closure.
+
+        teloxide::repl(self.bot.clone(), move |bot: Bot, msg: Message| {
+            let sender = sender.clone(); // Move the sender into the async block.
+            async move {
+                sender
+                    .send(create_uni_message(msg))
+                    .expect("Failed to send message");
+                Ok(())
+            }
+        })
+            .await;
+    }
+}
+
+
+
+fn create_uni_message(msg: Message) -> UniMessage {
+    UniMessage{
+        message: msg.text().clone().unwrap().to_string(),
+        to_channel_id: None,
+        attachment_urls: Vec::new(),
+        from_channel_id: ChannelId::I64(msg.chat.id.0),
+        id: msg.id.0.to_string(),
+        author: msg.from.unwrap().username.unwrap().to_string()
+    }
+}
+
+
+impl MessengerBot for TelegramBot {
+
 }
 
 fn get_messages(message: &UniMessage) -> Vec<(String, ParseMode)> {

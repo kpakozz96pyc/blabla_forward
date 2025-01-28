@@ -2,9 +2,13 @@ use crate::bot_impl::discord_bot::DiscordBot;
 use crate::bot_impl::telegram_bot::TelegramBot;
 use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::SendMessage;
-use crate::message_handler::{MessageHandler};
+use crate::message_handler::{BridgeTarget, MessageHandler, UniBridge};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::spawn;
+use crate::bot_impl::channel_id::ChannelId;
+use tokio::sync::{mpsc, Mutex};
+use crate::bot_traits::listen::Listen;
+use crate::bot_traits::messenger_bot::MessengerBot;
 
 mod bot_impl;
 mod bot_traits;
@@ -15,50 +19,85 @@ mod settings;
 async fn main() {
     println!("BlaBLa version 0.1.1");
     let settings = settings::Settings::new();
-    let (tx, mut rx) = mpsc::unbounded_channel::<UniMessage>();
 
-    let shared_tx = Arc::new(tx);
 
-    let message_handler = MessageHandler {
-        bridges: settings.bridges.clone(),
-        sender: Arc::clone(&shared_tx),
-    };
+    let (tg_tx, mut tg_rx) = mpsc::unbounded_channel::<UniMessage>();
+    let (ds_tx, mut ds_rx) = mpsc::unbounded_channel::<UniMessage>();
 
-    let telegram_bot = create_telegram_bot(&settings.telegram_bot_token)
-        .await
-        .expect("Failed to create Telegram bot");
+    let mut discord_bot =
+        DiscordBot::new(settings.discord_bot_token.clone(), ds_tx).await;
+    let mut telegram_bot =
+        TelegramBot::new(settings.telegram_bot_token.clone(), tg_tx);
 
-    let telegram_bot_clone = Arc::clone(&telegram_bot);
+    discord_bot.listen().await;
 
-    tokio::spawn(async move {
-        while let Some(message) = rx.recv().await {
-            let _ = telegram_bot_clone.send(message).await;
+
+    // Share the bots and message handler across spawned tasks
+    let message_handler = Arc::new(Mutex::new(MessageHandler {
+        discord_channels: settings
+            .td_bridges
+            .iter()
+            .map(|bridge| ChannelId::U64(bridge.to_channel_id.clone())) // Extract the `discord_channel`
+            .collect(),
+        telegram_channels: settings
+            .dt_bridges
+            .iter()
+            .map(|bridge| ChannelId::I64(bridge.to_channel_id.clone())) // Extract the `discord_channel`
+            .collect(),
+        bridges: get_uni_bridges(&settings),
+    }));
+
+
+    spawn(async move {
+        while let Some(message) = ds_rx.recv().await {
+            println!("{}", message.message)
         }
     });
 
-    let discord_bot =
-        create_discord_bot(&settings.discord_bot_token, Arc::new(message_handler));
 
-    discord_bot.await.expect("Failed to initialize Discord bot");
+    spawn(async move {
+        while let Some(message) = tg_rx.recv().await {
+            println!("{}", message.message)
+        }
+    });
+
 }
 
-async fn create_telegram_bot(token: &str) -> Result<Arc<TelegramBot>, &'static str> {
-    for attempt in 1..=3 {
-        let telegram_bot = TelegramBot::new(token);
-        println!("Telegram bot created successfully on attempt {attempt}");
-        return Ok(Arc::new(telegram_bot));
+async fn try_send(
+    discord_bot: &Arc<Mutex<DiscordBot>>,
+    telegram_bot: &Arc<Mutex<TelegramBot>>,
+    messages: Vec<(BridgeTarget, UniMessage)>,
+) {
+    for m in messages {
+        match m.0 {
+            BridgeTarget::Discord => {
+                discord_bot.lock().await.send(m.1).await;
+            }
+            BridgeTarget::Telegram => {
+                telegram_bot.lock().await.send(m.1).await;
+            }
+            BridgeTarget::Unknown => {
+                println!("Unknown bridge target");
+            }
+        }
     }
-    Err("Failed to create Telegram bot after 3 attempts.")
 }
 
-async fn create_discord_bot(
-    token: &str,
-    handler: Arc<MessageHandler>,
-) -> Result<DiscordBot, &'static str> {
-    for _ in 1..=3 {
-        // Attempt to create a Discord bot
-        let discord_bot = DiscordBot::new(token, handler).await;
-        return Ok(discord_bot);
-    }
-    Err("Failed to create Discord bot after 3 attempts.")
+fn get_uni_bridges(settings: &settings::Settings) -> Vec<UniBridge> {
+    let mut unibridges = Vec::new();
+    settings.dt_bridges.iter().for_each(|dt_bridge| {
+        unibridges.push(UniBridge {
+            to_channel_id: ChannelId::I64(dt_bridge.to_channel_id),
+            from_channel_id: ChannelId::U64(dt_bridge.from_channel_id)
+        });
+    });
+
+    settings.td_bridges.iter().for_each(|td_bridge| {
+        unibridges.push(UniBridge {
+            to_channel_id: ChannelId::U64(td_bridge.to_channel_id),
+            from_channel_id: ChannelId::I64(td_bridge.from_channel_id)
+        });
+    });
+
+    return unibridges;
 }

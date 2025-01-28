@@ -6,11 +6,15 @@ use serenity::client::Client;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use tokio::sync::mpsc::UnboundedSender;
+use crate::bot_impl::channel_id::ChannelId;
 use crate::bot_traits::listen::Listen;
+use crate::bot_traits::messenger_bot::MessengerBot;
+use crate::bot_traits::send::SendMessage;
 use crate::message_handler::MessageHandler;
 
 struct Handler {
-    handler: Arc<MessageHandler>,
+    sender: UnboundedSender<UniMessage>,
 }
 
 #[async_trait]
@@ -20,7 +24,7 @@ impl EventHandler for Handler {
              id: msg.id.to_string(),
              message: parse_message(&msg.content, &msg),
              author: msg.author.name,
-             from_channel_id: msg.channel_id.get(),
+             from_channel_id: ChannelId::U64(u64::from(msg.channel_id)),
              to_channel_id: None,
              attachment_urls: msg
                  .attachments
@@ -29,7 +33,9 @@ impl EventHandler for Handler {
                  .collect(),
          };
 
-        self.handler.handle_message(u_m);
+        if let Err(err) = self.sender.send(u_m) {
+            eprintln!("Discord failed to send message: {:?}", err);
+        }
     }
 
     // Called when the bot is ready
@@ -44,13 +50,13 @@ pub struct DiscordBot {
 
 impl DiscordBot {
     pub async fn new(
-        bot_token: &str,
-        handler: Arc<MessageHandler>
+        bot_token: String,
+        handler: UnboundedSender<UniMessage>
     ) -> Self {
         let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
         let handler = Handler {
-            handler
+            sender: handler
         };
         let mut client = Client::builder(bot_token, intents)
             .event_handler(handler)
@@ -64,13 +70,25 @@ impl DiscordBot {
 }
 
 #[async_trait]
+impl SendMessage for DiscordBot {
+    async fn send(&self, message: UniMessage) {
+        todo!()
+    }
+}
+
+#[async_trait]
 impl Listen for DiscordBot {
-    async fn listen(&mut self) -> Result<(), String> {
+
+    async fn listen(&mut self) {
         self.client
             .start()
             .await
-            .map_err(|e| format!("Discord bot stopped: {}", e))
+            .map_err(|e| format!("Discord bot stopped: {}", e)).expect("TODO: panic message");
     }
+}
+
+impl MessengerBot for DiscordBot {
+
 }
 
 
