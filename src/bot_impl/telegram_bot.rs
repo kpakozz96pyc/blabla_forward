@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::SendMessage;
 use async_trait::async_trait;
@@ -67,15 +68,15 @@ impl SendMessage for TelegramBot {
 #[async_trait]
 impl Listen for TelegramBot {
     async fn listen(&mut self) {
-        let sender = self.sender.clone(); // Clone the sender so it can be moved into the closure.
+        let sender = self.sender.clone(); // Clone the sender so it can be moved into the closure
 
-        teloxide::repl(self.bot.clone(), move |bot: Bot, msg: Message| {
-            let sender = sender.clone(); // Move the sender into the async block.
+        teloxide::repl(self.bot.clone(), move |_bot: Bot, msg: Message| {
+            let sender = sender.clone(); // Clone the sender again for each message
             async move {
                 sender
                     .send(create_uni_message(msg))
-                    .expect("Failed to send message");
-                Ok(())
+                    .expect("Failed to send message"); // Handle the message
+                Ok(()) // Return the required result type
             }
         })
             .await;

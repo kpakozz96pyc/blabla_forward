@@ -25,11 +25,9 @@ async fn main() {
     let (ds_tx, mut ds_rx) = mpsc::unbounded_channel::<UniMessage>();
 
     let mut discord_bot =
-        DiscordBot::new(settings.discord_bot_token.clone(), ds_tx).await;
+        DiscordBot::new(settings.discord_bot_token.clone(), ds_tx);
     let mut telegram_bot =
         TelegramBot::new(settings.telegram_bot_token.clone(), tg_tx);
-
-    discord_bot.listen().await;
 
 
     // Share the bots and message handler across spawned tasks
@@ -60,6 +58,15 @@ async fn main() {
             println!("{}", message.message)
         }
     });
+
+
+    spawn(async move {
+        telegram_bot.listen().await;
+    });
+
+        discord_bot.await;
+
+
 
 }
 
