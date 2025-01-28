@@ -6,6 +6,7 @@ use serenity::client::Client;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use crate::bot_traits::listen::Listen;
 use crate::message_handler::MessageHandler;
 
 struct Handler {
@@ -61,6 +62,18 @@ impl DiscordBot {
         DiscordBot { client }
     }
 }
+
+#[async_trait]
+impl Listen for DiscordBot {
+    async fn listen(&mut self) -> Result<(), String> {
+        self.client
+            .start()
+            .await
+            .map_err(|e| format!("Discord bot stopped: {}", e))
+    }
+}
+
+
 
 fn parse_message(content: &str, msg: &Message) -> String {
     // Clone the content so the string can be mutated

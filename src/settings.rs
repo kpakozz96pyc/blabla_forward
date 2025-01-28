@@ -1,12 +1,13 @@
 use serde::Deserialize;
 use std::fs;
-use crate::message_handler::Bridge;
+use crate::message_handler::{DTBridge, TDBridge};
 
 #[derive(Deserialize)]
 pub struct Settings {
     pub telegram_bot_token: String,
     pub discord_bot_token: String,
-    pub bridges: Vec<Bridge>,
+    pub dt_bridges: Vec<DTBridge>,
+    pub td_bridges: Vec<TDBridge>,
 }
 
 impl Settings {

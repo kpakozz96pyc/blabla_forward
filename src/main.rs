@@ -21,7 +21,7 @@ async fn main() {
 
     let message_handler = MessageHandler {
         bridges: settings.bridges.clone(),
-        bus: Arc::clone(&shared_tx),
+        sender: Arc::clone(&shared_tx),
     };
 
     let telegram_bot = create_telegram_bot(&settings.telegram_bot_token)
