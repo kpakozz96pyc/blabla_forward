@@ -4,6 +4,7 @@ use crate::bot_impl::uni_message::UniMessage;
 use crate::bot_traits::send::SendMessage;
 use crate::message_handler::{BridgeTarget, MessageHandler, UniBridge};
 use std::sync::Arc;
+use serenity::futures::SinkExt;
 use tokio::spawn;
 use crate::bot_impl::channel_id::ChannelId;
 use tokio::sync::{mpsc, Mutex};
@@ -18,20 +19,21 @@ mod settings;
 #[tokio::main]
 async fn main() {
     println!("BlaBLa version 0.1.1");
+
     let settings = settings::Settings::new();
 
+    let (sender, mut receiver) = mpsc::unbounded_channel::<UniMessage>();
 
-    let (tg_tx, mut tg_rx) = mpsc::unbounded_channel::<UniMessage>();
-    let (ds_tx, mut ds_rx) = mpsc::unbounded_channel::<UniMessage>();
-
-    let mut discord_bot =
-        DiscordBot::new(settings.discord_bot_token.clone(), ds_tx);
-    let mut telegram_bot =
-        TelegramBot::new(settings.telegram_bot_token.clone(), tg_tx);
-
+    // Wrap the bots with Arc<Mutex<>> for shared ownership and thread-safe mutability
+    let discord_bot = Arc::new(Mutex::new(
+        DiscordBot::new(settings.discord_bot_token.clone(), sender.clone()),
+    ));
+    let telegram_bot = Arc::new(Mutex::new(
+        TelegramBot::new(settings.telegram_bot_token.clone(), sender.clone()),
+    ));
 
     // Share the bots and message handler across spawned tasks
-    let message_handler = Arc::new(Mutex::new(MessageHandler {
+    let message_handler = MessageHandler {
         discord_channels: settings
             .td_bridges
             .iter()
@@ -40,48 +42,64 @@ async fn main() {
         telegram_channels: settings
             .dt_bridges
             .iter()
-            .map(|bridge| ChannelId::I64(bridge.to_channel_id.clone())) // Extract the `discord_channel`
+            .map(|bridge| ChannelId::I64(bridge.to_channel_id.clone())) // Extract the `telegram_channel`
             .collect(),
         bridges: get_uni_bridges(&settings),
-    }));
+    };
 
+    // Spawn a task for the Telegram bot's `listen` method
+    {
+        let telegram_bot = Arc::clone(&telegram_bot);
+        spawn(async move {
+            // Lock the Mutex for mutable access
+            let mut telegram_bot = telegram_bot.lock().await;
+            telegram_bot.listen().await;
+        });
+    }
 
-    spawn(async move {
-        while let Some(message) = ds_rx.recv().await {
-            println!("{}", message.message)
-        }
-    });
+    // Spawn a task for the Discord bot's `listen` method
+    {
+        let discord_bot = Arc::clone(&discord_bot);
+        spawn(async move {
+            // Lock the Mutex for mutable access
+            let mut discord_bot = discord_bot.lock().await;
+            discord_bot.start().await;
+            discord_bot.listen().await;
+        });
+    }
+    {
+        spawn(async move {
+            while let Some(message) = receiver.recv().await {
+                let messages = message_handler.handle_message(message);
 
+                // Call try_send with cloned Arc references
+                try_send(discord_bot.clone(), telegram_bot.clone(), messages).await;
+            }
+        });
+    }
 
-    spawn(async move {
-        while let Some(message) = tg_rx.recv().await {
-            println!("{}", message.message)
-        }
-    });
-
-
-    spawn(async move {
-        telegram_bot.listen().await;
-    });
-
-        discord_bot.await;
-
-
-
+    // Main loop to keep the program alive
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    }
 }
 
 async fn try_send(
-    discord_bot: &Arc<Mutex<DiscordBot>>,
-    telegram_bot: &Arc<Mutex<TelegramBot>>,
+    discord_bot: Arc<Mutex<DiscordBot>>,
+    telegram_bot: Arc<Mutex<TelegramBot>>,
     messages: Vec<(BridgeTarget, UniMessage)>,
 ) {
     for m in messages {
         match m.0 {
             BridgeTarget::Discord => {
-                discord_bot.lock().await.send(m.1).await;
+                // Lock the Discord bot before sending
+                let mut discord_bot = discord_bot.lock().await;
+                discord_bot.send(m.1).await;
             }
             BridgeTarget::Telegram => {
-                telegram_bot.lock().await.send(m.1).await;
+                // Lock the Telegram bot before sending
+                let mut telegram_bot = telegram_bot.lock().await;
+                telegram_bot.send(m.1).await;
             }
             BridgeTarget::Unknown => {
                 println!("Unknown bridge target");

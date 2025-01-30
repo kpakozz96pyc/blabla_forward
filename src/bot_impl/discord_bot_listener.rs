@@ -1,5 +1,3 @@
-use std::sync::Arc;
-use std::sync::mpsc::Sender;
 use crate::bot_impl::uni_message::UniMessage;
 use serenity::all::GatewayIntents;
 use serenity::async_trait;
@@ -20,18 +18,18 @@ struct Handler {
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, _ctx: Context, msg: Message) {
-         let u_m = UniMessage {
-             id: msg.id.to_string(),
-             message: parse_message(&msg.content, &msg),
-             author: msg.author.name,
-             from_channel_id: ChannelId::U64(u64::from(msg.channel_id)),
-             to_channel_id: None,
-             attachment_urls: msg
-                 .attachments
-                 .into_iter()
-                 .map(|a| a.url.to_string())
-                 .collect(),
-         };
+        let u_m = UniMessage {
+            id: msg.id.to_string(),
+            message: parse_message(&msg.content, &msg),
+            author: msg.author.name,
+            from_channel_id: ChannelId::U64(u64::from(msg.channel_id)),
+            to_channel_id: None,
+            attachment_urls: msg
+                .attachments
+                .into_iter()
+                .map(|a| a.url.to_string())
+                .collect(),
+        };
 
         if let Err(err) = self.sender.send(u_m) {
             eprintln!("Discord failed to send message: {:?}", err);
@@ -44,19 +42,19 @@ impl EventHandler for Handler {
     }
 }
 
-pub struct DiscordBot {
+pub struct DiscordBotListener {
     bot_token: String,
     client: Option<Client>,
     sender: UnboundedSender<UniMessage>
 }
 
-impl DiscordBot {
+impl DiscordBotListener {
     pub fn new(
         bot_token: String,
         sender: UnboundedSender<UniMessage>
     ) -> Self {
 
-        DiscordBot { sender, client:None, bot_token }
+        DiscordBotListener { sender, client:None, bot_token }
     }
 
     pub async fn start(&mut self){
