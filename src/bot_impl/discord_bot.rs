@@ -7,6 +7,7 @@ use serenity::client::Client;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use serenity::builder::CreateMessage; // Necessary for message building.
 use tokio::sync::mpsc::UnboundedSender;
 use crate::bot_impl::channel_id::ChannelId;
 use crate::bot_traits::listen::Listen;
@@ -78,9 +79,27 @@ impl DiscordBot {
 #[async_trait]
 impl SendMessage for DiscordBot {
     async fn send(&self, message: UniMessage) {
-        todo!()
+        if let Some(client) = &self.client {
+            let http = client.http.clone();
+
+            // Match the ChannelId enum from UniMessage
+            if let ChannelId::U64(channel_id) = message.to_channel_id {
+                // Convert the u64 to a Serenity ChannelId
+                let channel_id = channel_id;
+
+                // Use http.create_message to send the message
+                let _ = http
+                    .send_message(ChannelId::from(channel_id), &serenity::builder::CreateMessage::new().content(content))
+                    .await
+                    .expect("Failed to send message");
+
+            }
+        }
     }
 }
+
+
+
 
 #[async_trait]
 impl Listen for DiscordBot {

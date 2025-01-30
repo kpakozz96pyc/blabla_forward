@@ -69,11 +69,15 @@ async fn main() {
     }
     {
         spawn(async move {
+            let (_s, mut _r) = mpsc::unbounded_channel::<UniMessage>();
+            let discord_bot =
+                DiscordBot::new(settings.discord_bot_token.clone(), _s.clone());
+            let telegram_bot =
+                TelegramBot::new(settings.telegram_bot_token.clone(), _s.clone());
             while let Some(message) = receiver.recv().await {
                 let messages = message_handler.handle_message(message);
 
-                // Call try_send with cloned Arc references
-                try_send(discord_bot.clone(), telegram_bot.clone(), messages).await;
+                try_send(&discord_bot, &telegram_bot, messages).await;
             }
         });
     }
@@ -85,20 +89,17 @@ async fn main() {
 }
 
 async fn try_send(
-    discord_bot: Arc<Mutex<DiscordBot>>,
-    telegram_bot: Arc<Mutex<TelegramBot>>,
+    discord_bot: &DiscordBot,
+    telegram_bot: &TelegramBot,
     messages: Vec<(BridgeTarget, UniMessage)>,
 ) {
     for m in messages {
         match m.0 {
             BridgeTarget::Discord => {
                 // Lock the Discord bot before sending
-                let mut discord_bot = discord_bot.lock().await;
                 discord_bot.send(m.1).await;
             }
             BridgeTarget::Telegram => {
-                // Lock the Telegram bot before sending
-                let mut telegram_bot = telegram_bot.lock().await;
                 telegram_bot.send(m.1).await;
             }
             BridgeTarget::Unknown => {
